@@ -230,6 +230,7 @@ class CraftBotCore:
         inventory_region=None,
         break_slots_region=None,
         break_slots_target=0,
+        empty_slot_path=None,
         no_resources_path=None,
     ):
         # ✅ коллбэки
@@ -249,7 +250,28 @@ class CraftBotCore:
         self.inventory_region = inventory_region
         self.break_slots_region = break_slots_region
         self.break_slots_target = max(0, int(break_slots_target))
+        self.empty_slot_path = empty_slot_path
+        self.empty_slot_img = None
         self.auto_break = auto_break
+
+        if empty_slot_path and os.path.exists(empty_slot_path):
+            try:
+                self.empty_slot_img = cv2.imread(empty_slot_path)
+                if self.empty_slot_img is not None:
+                    self.log(
+                        f"✅ Загружено изображение пустого слота: {os.path.basename(empty_slot_path)}",
+                        "SUCCESS",
+                    )
+                else:
+                    self.log(
+                        f"❌ Не удалось загрузить изображение пустого слота: {empty_slot_path}",
+                        "ERROR",
+                    )
+            except Exception as e:
+                self.log(
+                    f"❌ Ошибка загрузки изображения пустого слота: {str(e)}",
+                    "ERROR",
+                )
 
         # --- threshold (КРИТИЧНО!) ---
         try:
@@ -439,6 +461,28 @@ class CraftBotCore:
         for p in results:
             if not any(math.hypot(p[0] - u[0], p[1] - u[1]) < 20 for u in unique):
                 unique.append(p)
+
+        if self.empty_slot_img is not None and self.break_slots_target > 0:
+            try:
+                empty_result = cv2.matchTemplate(screenshot_cv, self.empty_slot_img, cv2.TM_CCOEFF_NORMED)
+                empty_locations = np.where(empty_result >= self.threshold * 0.9)
+
+                empty_points: List[Tuple[int, int]] = []
+                h_empty, w_empty = self.empty_slot_img.shape[:2]
+                for pt in zip(*empty_locations[::-1]):
+                    cx = x + pt[0] + w_empty // 2
+                    cy = y + pt[1] + h_empty // 2
+                    empty_points.append((int(cx), int(cy)))
+
+                unique_empty = []
+                for p in empty_points:
+                    if not any(math.hypot(p[0] - u[0], p[1] - u[1]) < 20 for u in unique_empty):
+                        unique_empty.append(p)
+
+                occupied_slots = max(0, self.break_slots_target - len(unique_empty))
+                return max(len(unique), occupied_slots)
+            except Exception as e:
+                self.log(f"Ошибка при подсчете пустых слотов: {str(e)}", "WARNING")
 
         return len(unique)
     def find_all_break_items(self) -> List[Tuple[int, int]]:
