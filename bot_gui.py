@@ -144,6 +144,7 @@ class CraftBotGUI:
         # Инициализируем переменные
         self.region = None
         self.inventory_region = None
+        self.break_slots_region = None
         self.items = {}
         self.create_button_path = ""
         self.no_resources_path = ""  # НОВОЕ: путь к изображению "нет ресурсов"
@@ -338,6 +339,20 @@ class CraftBotGUI:
         ttk.Label(break_config_frame, text="Задержка поворота (сек):").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.turn_delay_var = tk.StringVar(value="1.0")
         ttk.Entry(break_config_frame, textvariable=self.turn_delay_var, width=8).grid(row=1, column=1, pady=5, padx=(10, 20), sticky=tk.W)
+
+        ttk.Label(break_config_frame, text="Слотов в дробилке:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.break_slots_target_var = tk.StringVar(value="0")
+        ttk.Entry(break_config_frame, textvariable=self.break_slots_target_var, width=8).grid(row=2, column=1, pady=5, padx=(10, 20), sticky=tk.W)
+
+        ttk.Button(
+            break_config_frame,
+            text="🧩 Выделить слоты дробилки",
+            command=lambda: self.select_region(is_break_slots=True),
+            width=25,
+        ).grid(row=2, column=2, sticky=tk.W, pady=5)
+
+        self.break_slots_region_label = ttk.Label(break_config_frame, text="Не выделена", foreground="gray")
+        self.break_slots_region_label.grid(row=2, column=3, sticky=tk.W, pady=5)
         
         self.auto_break_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(break_config_frame, text="Автоматический разбор", 
@@ -563,7 +578,7 @@ class CraftBotGUI:
         except Exception as e:
             self.log_message(f"Ошибка при загрузке изображения: {str(e)}", "ERROR")
     
-    def select_region(self, is_inventory=False):
+    def select_region(self, is_inventory=False, is_break_slots=False):
         """Выделение области мышью через оверлей"""
         try:
             # Свернём окно, чтобы не мешало выделять
@@ -571,7 +586,10 @@ class CraftBotGUI:
             self.root.update_idletasks()
             time.sleep(0.2)
 
-            title = "Выделите область ИНВЕНТАРЯ" if is_inventory else "Выделите область ПРЕДМЕТОВ"
+            if is_break_slots:
+                title = "Выделите область СЛОТОВ ДРОБИЛКИ"
+            else:
+                title = "Выделите область ИНВЕНТАРЯ" if is_inventory else "Выделите область ПРЕДМЕТОВ"
             overlay = RegionSelectorOverlay(self.root, title=title)
             region = overlay.show()
 
@@ -586,7 +604,11 @@ class CraftBotGUI:
 
             x, y, w, h = region
 
-            if is_inventory:
+            if is_break_slots:
+                self.break_slots_region = (x, y, w, h)
+                self.break_slots_region_label.config(text=f"{w}x{h} пикселей")
+                self.log_message(f"✅ Область слотов дробилки: x={x}, y={y}, w={w}, h={h}", "SUCCESS")
+            elif is_inventory:
                 self.inventory_region = (x, y, w, h)
                 self.inv_region_label.config(text=f"{w}x{h} пикселей")
                 self.log_message(f"✅ Область инвентаря: x={x}, y={y}, w={w}, h={h}", "SUCCESS")
@@ -725,6 +747,14 @@ class CraftBotGUI:
                 if break_count <= 0:
                     messagebox.showerror("Ошибка", "Количество предметов до разбора должно быть больше 0")
                     return
+
+                break_slots_target = int(self.break_slots_target_var.get())
+                if break_slots_target < 0:
+                    messagebox.showerror("Ошибка", "Количество слотов в дробилке не может быть меньше 0")
+                    return
+                if break_slots_target > 0 and not self.break_slots_region:
+                    messagebox.showerror("Ошибка", "Выделите область слотов дробилки или поставьте 0")
+                    return
                 
                 turn_pixels = int(self.turn_pixels_var.get())
                 if turn_pixels <= 0:
@@ -754,6 +784,8 @@ class CraftBotGUI:
                 turn_delay=float(self.turn_delay_var.get()),
                 turn_pixels=int(self.turn_pixels_var.get()),
                 inventory_region=self.inventory_region,
+                break_slots_region=self.break_slots_region,
+                break_slots_target=int(self.break_slots_target_var.get()),
                 auto_break=self.auto_break_var.get(),
                 no_resources_path=self.no_resources_path if hasattr(self, 'no_resources_path') and self.no_resources_path else None,
                 gui_callback=self.update_counters,
@@ -1115,6 +1147,7 @@ class CraftBotGUI:
             config = {
                 'region': self.region,
                 'inventory_region': self.inventory_region,
+                'break_slots_region': self.break_slots_region,
                 'create_button_path': os.path.abspath(self.create_button_path) if self.create_button_path and os.path.exists(self.create_button_path) else '',
                 'no_resources_path': os.path.abspath(self.no_resources_path) if hasattr(self, 'no_resources_path') and self.no_resources_path and os.path.exists(self.no_resources_path) else '',
                 'items': items_to_save,
@@ -1124,6 +1157,7 @@ class CraftBotGUI:
                 'break_count': self.break_count_var.get(),
                 'turn_delay': self.turn_delay_var.get(),
                 'turn_pixels': self.turn_pixels_var.get(),
+                'break_slots_target': self.break_slots_target_var.get(),
                 'empty_crafts': self.empty_crafts_var.get(),
                 'auto_break': self.auto_break_var.get()
             }
@@ -1151,6 +1185,7 @@ class CraftBotGUI:
             
             self.region = None
             self.inventory_region = None
+            self.break_slots_region = None
             self.items = {}
             self.no_resources_path = ""
             
@@ -1171,6 +1206,12 @@ class CraftBotGUI:
                 width, height = self.inventory_region[2], self.inventory_region[3]
                 self.inv_region_label.config(text=f"{width}x{height} пикселей")
                 self.log_message(f"Загружена область инвентаря: {width}x{height}", "SUCCESS")
+
+            if 'break_slots_region' in config and config['break_slots_region']:
+                self.break_slots_region = tuple(config['break_slots_region'])
+                width, height = self.break_slots_region[2], self.break_slots_region[3]
+                self.break_slots_region_label.config(text=f"{width}x{height} пикселей")
+                self.log_message(f"Загружена область слотов дробилки: {width}x{height}", "SUCCESS")
             
             # Загрузка кнопки создания
             if 'create_button_path' in config and config['create_button_path']:
@@ -1247,6 +1288,8 @@ class CraftBotGUI:
                 self.turn_delay_var.set(config['turn_delay'])
             if 'turn_pixels' in config:
                 self.turn_pixels_var.set(config['turn_pixels'])
+            if 'break_slots_target' in config:
+                self.break_slots_target_var.set(config['break_slots_target'])
             if 'empty_crafts' in config:
                 self.empty_crafts_var.set(config['empty_crafts'])
             if 'auto_break' in config:

@@ -228,6 +228,8 @@ class CraftBotCore:
         log_callback=None,
         turn_pixels=500,
         inventory_region=None,
+        break_slots_region=None,
+        break_slots_target=0,
         no_resources_path=None,
     ):
         # ✅ коллбэки
@@ -245,6 +247,8 @@ class CraftBotCore:
         self.turn_delay = float(turn_delay)
         self.turn_pixels = int(turn_pixels)
         self.inventory_region = inventory_region
+        self.break_slots_region = break_slots_region
+        self.break_slots_target = max(0, int(break_slots_target))
         self.auto_break = auto_break
 
         # --- threshold (КРИТИЧНО!) ---
@@ -399,6 +403,44 @@ class CraftBotCore:
             "DEBUG": "🔍",
         }.get(level, "ℹ️")
         print(f"[{timestamp}] {level_icon} {message}")
+
+    def count_break_items_in_region(self, target_region: Optional[Tuple[int, int, int, int]]) -> int:
+        """Считает количество предметов для разбора в указанной области."""
+        if not target_region:
+            return 0
+
+        x, y, w, h = target_region
+
+        screenshot = pyautogui.screenshot(region=target_region)
+        screenshot_np = np.array(screenshot)
+        screenshot_cv = cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
+
+        results: List[Tuple[int, int]] = []
+
+        for item in self.items:
+            for grade in item.grades:
+                if not grade.break_it or not os.path.exists(grade.path):
+                    continue
+
+                template = cv2.imread(grade.path)
+                if template is None:
+                    continue
+
+                h_t, w_t = template.shape[:2]
+                result = cv2.matchTemplate(screenshot_cv, template, cv2.TM_CCOEFF_NORMED)
+                locations = np.where(result >= self.threshold)
+
+                for pt in zip(*locations[::-1]):
+                    cx = x + pt[0] + w_t // 2
+                    cy = y + pt[1] + h_t // 2
+                    results.append((int(cx), int(cy)))
+
+        unique = []
+        for p in results:
+            if not any(math.hypot(p[0] - u[0], p[1] - u[1]) < 20 for u in unique):
+                unique.append(p)
+
+        return len(unique)
     def find_all_break_items(self) -> List[Tuple[int, int]]:
         """
         Ищет ВСЕ предметы всех грейдов, помеченных break_it=True,
@@ -812,8 +854,26 @@ class CraftBotCore:
             time.sleep(2.0)
 
             items_broken = 0
+            slots_control_enabled = bool(self.break_slots_region and self.break_slots_target > 0)
+
+            if slots_control_enabled:
+                self.log(
+                    f"🧩 Контроль слотов дробилки включен: цель {self.break_slots_target}",
+                    "INFO"
+                )
 
             while self.running:
+                if slots_control_enabled:
+                    current_slots_count = self.count_break_items_in_region(self.break_slots_region)
+                    self.log(
+                        f"📦 Слоты дробилки заняты: {current_slots_count}/{self.break_slots_target}",
+                        "INFO"
+                    )
+
+                    if current_slots_count >= self.break_slots_target:
+                        self.log("✅ Слоты дробилки заполнены, добавление из инвентаря не требуется", "INFO")
+                        break
+
                 positions = self.find_all_break_items()
 
                 if not positions:
@@ -841,6 +901,17 @@ class CraftBotCore:
                 items_broken += 1
                 self.broken_count += 1
                 self.update_gui()
+
+                if slots_control_enabled:
+                    new_slots_count = self.count_break_items_in_region(self.break_slots_region)
+                    self.log(
+                        f"🔄 После добавления: {new_slots_count}/{self.break_slots_target}",
+                        "INFO"
+                    )
+
+                    if new_slots_count >= self.break_slots_target:
+                        self.log("✅ Достигнуто нужное количество предметов в слотах дробилки", "SUCCESS")
+                        break
 
             keyboard.press_and_release("esc")
             time.sleep(1.5)
