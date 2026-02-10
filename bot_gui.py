@@ -148,6 +148,7 @@ class CraftBotGUI:
         self.items = {}
         self.create_button_path = ""
         self.no_resources_path = ""  # НОВОЕ: путь к изображению "нет ресурсов"
+        self.empty_slot_path = ""  # путь к изображению пустого слота дробилки
         
         # Статистика
         self.start_time = None
@@ -353,6 +354,16 @@ class CraftBotGUI:
 
         self.break_slots_region_label = ttk.Label(break_config_frame, text="Не выделена", foreground="gray")
         self.break_slots_region_label.grid(row=2, column=3, sticky=tk.W, pady=5)
+
+        ttk.Button(
+            break_config_frame,
+            text="🖼️ Загрузить пустой слот",
+            command=self.load_empty_slot_image,
+            width=25,
+        ).grid(row=3, column=2, sticky=tk.W, pady=5)
+
+        self.empty_slot_label = ttk.Label(break_config_frame, text="Не загружено", foreground="gray")
+        self.empty_slot_label.grid(row=3, column=3, sticky=tk.W, pady=5)
         
         self.auto_break_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(break_config_frame, text="Автоматический разбор", 
@@ -577,6 +588,26 @@ class CraftBotGUI:
                     messagebox.showerror("Ошибка", "Выбранный файл не существует!")
         except Exception as e:
             self.log_message(f"Ошибка при загрузке изображения: {str(e)}", "ERROR")
+
+    def load_empty_slot_image(self):
+        """Загрузка изображения пустого слота дробилки."""
+        try:
+            file_path = filedialog.askopenfilename(
+                title="Выберите изображение ПУСТОГО слота дробилки",
+                filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg;*.jpeg"), ("All files", "*.*")]
+            )
+
+            if file_path:
+                if os.path.exists(file_path):
+                    self.empty_slot_path = os.path.abspath(file_path)
+                    filename = os.path.basename(file_path)
+                    display_name = filename[:25] + ("..." if len(filename) > 25 else "")
+                    self.empty_slot_label.config(text=display_name)
+                    self.log_message(f"Загружено изображение пустого слота: {filename}", "SUCCESS")
+                else:
+                    messagebox.showerror("Ошибка", "Выбранный файл не существует!")
+        except Exception as e:
+            self.log_message(f"Ошибка при загрузке пустого слота: {str(e)}", "ERROR")
     
     def select_region(self, is_inventory=False, is_break_slots=False):
         """Выделение области мышью через оверлей"""
@@ -786,6 +817,7 @@ class CraftBotGUI:
                 inventory_region=self.inventory_region,
                 break_slots_region=self.break_slots_region,
                 break_slots_target=int(self.break_slots_target_var.get()),
+                empty_slot_path=self.empty_slot_path if self.empty_slot_path else None,
                 auto_break=self.auto_break_var.get(),
                 no_resources_path=self.no_resources_path if hasattr(self, 'no_resources_path') and self.no_resources_path else None,
                 gui_callback=self.update_counters,
@@ -1150,6 +1182,7 @@ class CraftBotGUI:
                 'break_slots_region': self.break_slots_region,
                 'create_button_path': os.path.abspath(self.create_button_path) if self.create_button_path and os.path.exists(self.create_button_path) else '',
                 'no_resources_path': os.path.abspath(self.no_resources_path) if hasattr(self, 'no_resources_path') and self.no_resources_path and os.path.exists(self.no_resources_path) else '',
+                'empty_slot_path': os.path.abspath(self.empty_slot_path) if self.empty_slot_path and os.path.exists(self.empty_slot_path) else '',
                 'items': items_to_save,
                 'create_delay': self.create_delay_var.get(),
                 'click_delay': self.click_delay_var.get(),
@@ -1188,6 +1221,7 @@ class CraftBotGUI:
             self.break_slots_region = None
             self.items = {}
             self.no_resources_path = ""
+            self.empty_slot_path = ""
             
             # Очистка дерева
             for item in self.items_tree.get_children():
@@ -1238,6 +1272,18 @@ class CraftBotGUI:
                     self.no_resources_path = ""
                     self.no_resources_label.config(text="Не загружено")
                     self.log_message(f"Файл проверки ресурсов не найден: {path}", "WARNING")
+
+            if 'empty_slot_path' in config and config['empty_slot_path']:
+                path = config['empty_slot_path']
+                if os.path.exists(path):
+                    self.empty_slot_path = os.path.abspath(path)
+                    filename = os.path.basename(path)
+                    self.empty_slot_label.config(text=filename[:25] + ("..." if len(filename) > 25 else ""))
+                    self.log_message(f"Загружено изображение пустого слота: {filename}", "SUCCESS")
+                else:
+                    self.empty_slot_path = ""
+                    self.empty_slot_label.config(text="Не загружено")
+                    self.log_message(f"Файл пустого слота не найден: {path}", "WARNING")
             
             # Загрузка предметов
             if 'items' in config:
