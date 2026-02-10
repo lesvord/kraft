@@ -1,0 +1,39 @@
+{
+  "region": [
+    2028,
+    879,
+    675,
+    277
+  ],
+  "inventory_region": [
+    2752,
+    466,
+    631,
+    610
+  ],
+  "create_button_path": "D:\\kraft\\knopki\\sozdat.png",
+  "no_resources_path": "D:\\kraft\\knopki\\resursovnewt.png",
+  "items": {
+    "1": {
+      "grades": [
+        {
+          "path": "D:\\kraft\\topor\\tzel.png",
+          "break": true
+        },
+        {
+          "path": "D:\\kraft\\topor\\tsin.png",
+          "break": true
+        }
+      ],
+      "count": 0
+    }
+  },
+  "create_delay": "2.0",
+  "click_delay": "0.3",
+  "threshold": "85",
+  "break_count": "1",
+  "turn_delay": "1.0",
+  "turn_pixels": "800",
+  "empty_crafts": "3",
+  "auto_break": true
+}
